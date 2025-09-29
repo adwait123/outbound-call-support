@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: outbound-call-service
+    env: python
+    plan: starter
+    buildCommand: pip install -r web_requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT web_service:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: TEST_ADDRESS
+        value: "123 Oak Street, Springfield, IL 62701"
+      - key: LIVEKIT_URL
+        sync: false  # Set this in Render dashboard
+      - key: LIVEKIT_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: LIVEKIT_API_SECRET
+        sync: false  # Set this in Render dashboard
+      - key: SIP_OUTBOUND_TRUNK_ID
+        sync: false  # Set this in Render dashboard
+      - key: AGENT_NAME
+        value: "outbound_call_agent"
+      - key: OPENAI_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: DEEPGRAM_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: CARTESIA_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: CEREBRAS_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: PERPLEXITY_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: USE_CARTESIA_TTS
+        value: "true"
+      - key: FLASK_ENV
+        value: "production"

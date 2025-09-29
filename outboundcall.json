@@ -1,0 +1,11 @@
+{
+    "trunk": {
+        "name": "My outbound trunk",
+        "address": "outbound-call-book-appt.pstn.twilio.com",
+        "numbers": [
+            "+16195734566"
+        ],
+        "auth_username": "testuser1",
+        "auth_password": "Welcometotheparty123!"
+    }
+}

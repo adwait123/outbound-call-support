@@ -1,0 +1,5 @@
+livekit-agents[deepgram,openai,cartesia,silero,turn-detector]==1.2.5
+livekit-plugins-noise-cancellation==0.2.4
+python-dotenv==1.1.1
+aiohttp==3.12.14
+tzdata==2025.2
