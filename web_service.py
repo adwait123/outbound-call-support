@@ -65,12 +65,16 @@ def validate_request_data(data: Dict[str, Any]) -> Optional[str]:
     # Additional validation
     first_name = data.get('first_name', '').strip()
     last_name = data.get('last_name', '').strip()
+    project_info = data.get('project_info', '').strip()
 
     if len(first_name) < 1 or len(last_name) < 1:
         return "First name and last name must be at least 1 character"
 
     if len(first_name) > 50 or len(last_name) > 50:
         return "Names must be less than 50 characters"
+
+    if project_info and len(project_info) > 200:
+        return "Project information must be less than 200 characters"
 
     return None
 
@@ -123,6 +127,7 @@ def dispatch_call():
         last_name = data['last_name'].strip()
         phone_number = data['phone_number'].strip()
         address = data.get('address', TEST_ADDRESS).strip()
+        project_info = data.get('project_info', '').strip()
 
         # Validate phone number
         validated_phone = validate_phone_number(phone_number)
@@ -147,7 +152,8 @@ def dispatch_call():
             "customer_info": {
                 "first_name": first_name,
                 "last_name": last_name,
-                "address": address
+                "address": address,
+                "project_info": project_info
             },
             "initiated_via": "web_api",
             "timestamp": datetime.utcnow().isoformat()

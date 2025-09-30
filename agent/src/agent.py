@@ -41,7 +41,7 @@ class Assistant(agents.Agent):
 
                     SALES & SCHEDULING WORKFLOW:
                     1. Opening and Lead Validation:
-                       Begin immediately: "Hi, this is Jack from Floor Covering International. I see you recently requested a Free In-Home Design Consultation on our website. Is that right, and do you still have a few minutes to confirm your appointment details?"
+                       Begin immediately: "Hi, this is Jack from Floor Covering International. I see you recently submitted a request to quote on Yelp. Is that right, and do you still have a few minutes to confirm your appointment details?"
                        WAIT for confirmation.
 
                     2. Information Confirmation:
@@ -63,7 +63,8 @@ class Assistant(agents.Agent):
 
                     4. Appointment Scheduling:
                        Call generate_appointment_slots with the confirmed details.
-                       Present exactly three options: "Fantastic. We have a design consultant available to visit you on [DATE_1] at [TIME_1], or on [DATE_2] at [TIME_2], or would [DATE_3] at [TIME_3] work better for you?"
+                       Present exactly TWO options initially: "Fantastic. We have a design consultant available to visit you on [DATE_1] at [TIME_1], or [DATE_2] at [TIME_2]. Which works better for you?"
+                       ONLY provide additional options if customer asks for more choices.
                        WAIT for their selection. Immediately confirm their choice: "Perfect, so you've chosen [SELECTED_DATE] at [SELECTED_TIME], is that correct?"
 
                     5. Confirmation and Wrap-Up:
@@ -82,11 +83,29 @@ class Assistant(agents.Agent):
                     - book_appointment: Secure the selected appointment slot
                     - raise_callback_request: Handle callback requests for scheduling conflicts
             """),
-            stt=deepgram.STT(model="nova-2", language="en-US", smart_format=True, interim_results=False),
-            llm=openai.LLM(model="gpt-4.1", parallel_tool_calls=False),
+            stt=deepgram.STT(
+                model="nova-2",
+                language="en-US",
+                smart_format=True,
+                interim_results=False,
+                filler_words=False,
+                punctuate=True,
+                profanity_filter=False,
+                redact=False
+            ),
+            llm=openai.LLM(
+                model="gpt-4.1",
+                parallel_tool_calls=False,
+                temperature=0.3,
+                max_tokens=150
+            ),
             tts=cartesia.TTS(
-                model="sonic-2", voice="146485fd-8736-41c7-88a8-7cdd0da34d84", language="en", speed=1.0,
-                sample_rate=24000, encoding="pcm_s16le",
+                model="sonic-2",
+                voice="146485fd-8736-41c7-88a8-7cdd0da34d84",
+                language="en",
+                speed=1.1,
+                sample_rate=24000,
+                encoding="pcm_s16le",
             ),
             vad=silero.VAD.load(),
             turn_detection=EnglishModel(),
@@ -131,14 +150,25 @@ class Assistant(agents.Agent):
                         first_name = customer_info.get("first_name", "")
                         last_name = customer_info.get("last_name", "")
                         address = customer_info.get("address", "")
+                        project_info = customer_info.get("project_info", "")
 
                         customer_context = f"""
                         CUSTOMER INFORMATION (from lead):
                         - First Name: {first_name}
                         - Last Name: {last_name}
                         - Address: {address}
+                        - Project Info: {project_info}
 
-                        IMPORTANT: Use the customer's first name "{first_name}" in your greeting if available.
+                        GREETING PROTOCOL:
+                        1. Start with: "Hi, I am Jack from Floor Covering International. Is this {first_name}?"
+                        2. Wait for confirmation (Yes/No)
+                        3. If YES: Proceed with sales flow
+                        4. If NO: Ask to speak with {first_name} or politely end call
+
+                        OPTION PRESENTATION STRATEGY:
+                        - Start with only 2 main options when presenting choices
+                        - Only provide additional options if customer specifically asks for more
+                        - Keep initial choices simple and clear
                         """
                 except:
                     customer_context = ""
@@ -164,12 +194,17 @@ class Assistant(agents.Agent):
                 instructions=textwrap.dedent(f"""
                     You are Jack from Floor Covering International making an outbound call.
                     The customer should speak first since you called them.
-                    Wait for them to say "Hello" or respond, then immediately say:
-                    "Hi [CUSTOMER_FIRST_NAME], this is Jack from Floor Covering International. I see you recently submitted a Request to quote on Yelp for a flooring job. Is that right, and do you still have a few minutes to confirm your appointment details?"
+                    Wait for them to say "Hello" or respond, then immediately follow the GREETING PROTOCOL:
 
-                    IMPORTANT: Replace [CUSTOMER_FIRST_NAME] with the actual customer's first name from the lead information if available, or just say "Hi" if no name is available.
+                    Say: "Hi, I am Jack from Floor Covering International. Is this [CUSTOMER_FIRST_NAME]?"
 
-                    Wait for their response before proceeding.
+                    IMPORTANT: Replace [CUSTOMER_FIRST_NAME] with the actual customer's first name from the lead information if available.
+
+                    Wait for their confirmation:
+                    - If YES: Continue with "Great! I see you recently submitted a request for a flooring quote. Do you have a few minutes to confirm your appointment details?"
+                    - If NO: Ask "May I speak with [CUSTOMER_FIRST_NAME]?" or politely end the call
+
+                    Only proceed with the sales flow after confirming you're speaking with the right person.
                 """),
                 allow_interruptions=True
             )
