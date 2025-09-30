@@ -188,7 +188,7 @@ def dispatch_call():
                 )
 
                 # Dispatch the agent
-                dispatch_response = await api.agent_dispatch.create_agent_dispatch(dispatch_request)
+                dispatch_response = await api.agent_dispatch.create_dispatch(dispatch_request)
                 logger.info(f"Dispatch successful: {dispatch_response}")
                 return True
 
