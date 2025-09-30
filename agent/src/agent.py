@@ -84,14 +84,18 @@ class Assistant(agents.Agent):
                     - raise_callback_request: Handle callback requests for scheduling conflicts
             """),
             stt=deepgram.STT(
-                model="nova-2",
+                model="nova-2-phonecall",
                 language="en-US",
                 smart_format=True,
-                interim_results=False,
-                filler_words=False,
+                interim_results=True,
+                filler_words=True,
                 punctuate=True,
                 profanity_filter=False,
-                redact=False
+                redact=False,
+                diarize=False,
+                multichannel=False,
+                alternatives=3,
+                tier="enhanced"
             ),
             llm=openai.LLM(
                 model="gpt-4.1",
