@@ -9,16 +9,13 @@ for integration with Zapier workflows and other automation tools.
 import os
 import json
 import logging
+import subprocess
 from typing import Dict, Any, Optional
 from functools import wraps
 from datetime import datetime
-import asyncio
-import threading
-from concurrent.futures import ThreadPoolExecutor
 
 from flask import Flask, request, jsonify, Response
 from dotenv import load_dotenv
-from livekit.api import LiveKitAPI
 
 # Import existing dispatch functionality
 from dispatch_call import validate_phone_number, create_dispatch_command
@@ -168,39 +165,63 @@ def dispatch_call():
                 'message': 'LiveKit credentials not configured'
             }), 500
 
-        def run_async_dispatch():
-            """Run the async dispatch in a separate thread with its own event loop."""
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                lk_api = LiveKitAPI(livekit_url, livekit_api_key, livekit_api_secret)
-                result = loop.run_until_complete(lk_api.agent.dispatch_job(
-                    agent_name=agent_name,
-                    room=room_name,
-                    metadata=json.dumps(metadata)
-                ))
-                return True, result
-            except Exception as e:
-                logger.error(f"LiveKit API dispatch failed: {str(e)}")
-                return False, str(e)
-            finally:
-                loop.close()
-
         try:
-            # Dispatch the agent using LiveKit API in separate thread
+            # Set up environment for lk CLI command
+            env = os.environ.copy()
+            env.update({
+                'LIVEKIT_URL': livekit_url,
+                'LIVEKIT_API_KEY': livekit_api_key,
+                'LIVEKIT_API_SECRET': livekit_api_secret
+            })
+
+            # Build LiveKit CLI command
+            command = [
+                'lk', 'dispatch', 'create',
+                '--new-room',
+                '--room', room_name,
+                '--agent-name', agent_name,
+                '--metadata', json.dumps(metadata)
+            ]
+
             logger.info(f"Dispatching call to: {validated_phone} for {first_name} {last_name}")
+            logger.info(f"Command: {' '.join(command)}")
 
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_async_dispatch)
-                dispatch_success, result = future.result(timeout=30)
+            # Execute the command using subprocess
+            result = subprocess.run(
+                command,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
 
-            if dispatch_success:
-                logger.info(f"Dispatch successful: {result}")
+            if result.returncode == 0:
+                logger.info(f"Dispatch successful: {result.stdout}")
+                dispatch_success = True
             else:
-                logger.error(f"Dispatch failed: {result}")
+                logger.error(f"Command failed with code {result.returncode}: {result.stderr}")
+                dispatch_success = False
 
+        except subprocess.TimeoutExpired:
+            logger.error("LiveKit dispatch command timed out")
+            dispatch_success = False
+        except FileNotFoundError:
+            logger.error("LiveKit CLI (lk) not found - installing via npm...")
+            # Try to install lk CLI
+            try:
+                subprocess.run(['npm', 'install', '-g', '@livekit/cli'], timeout=60)
+                # Retry the dispatch after installation
+                result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+                dispatch_success = result.returncode == 0
+                if dispatch_success:
+                    logger.info(f"Dispatch successful after CLI installation: {result.stdout}")
+                else:
+                    logger.error(f"Command failed after CLI installation: {result.stderr}")
+            except Exception as install_error:
+                logger.error(f"Failed to install LiveKit CLI: {install_error}")
+                dispatch_success = False
         except Exception as e:
-            logger.error(f"LiveKit API dispatch failed: {str(e)}")
+            logger.error(f"LiveKit dispatch failed: {str(e)}")
             dispatch_success = False
 
         if dispatch_success:
