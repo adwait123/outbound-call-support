@@ -213,7 +213,8 @@ def dispatch_call():
                 install_commands = [
                     ['npm', 'install', '-g', 'livekit-cli'],  # Alternative package name
                     ['npm', 'install', '-g', '@livekit/livekit-cli'],  # Another alternative
-                    ['curl', '-sSL', 'https://github.com/livekit/livekit-cli/releases/latest/download/lk_linux_amd64', '-o', '/tmp/lk'],  # Direct binary
+                    ['curl', '-sSL', 'https://github.com/livekit/livekit-cli/releases/latest/download/lk_linux_x86_64', '-o', '/tmp/lk'],  # x86_64 binary
+                    ['curl', '-sSL', 'https://github.com/livekit/livekit-cli/releases/latest/download/lk_linux_amd64', '-o', '/tmp/lk'],  # amd64 binary fallback
                 ]
 
                 installation_success = False
@@ -224,6 +225,10 @@ def dispatch_call():
                             # Download binary directly
                             subprocess.run(install_cmd, timeout=60, check=True)
                             subprocess.run(['chmod', '+x', '/tmp/lk'], timeout=10, check=True)
+                            # Test the binary works
+                            test_result = subprocess.run(['/tmp/lk', '--version'], capture_output=True, text=True, timeout=10)
+                            if test_result.returncode != 0:
+                                raise Exception(f"Downloaded binary doesn't work: {test_result.stderr}")
                             # Update command to use downloaded binary
                             command[0] = '/tmp/lk'
                         else:
