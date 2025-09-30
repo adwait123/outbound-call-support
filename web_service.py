@@ -13,6 +13,8 @@ from typing import Dict, Any, Optional
 from functools import wraps
 from datetime import datetime
 import asyncio
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from flask import Flask, request, jsonify, Response
 from dotenv import load_dotenv
@@ -166,21 +168,36 @@ def dispatch_call():
                 'message': 'LiveKit credentials not configured'
             }), 500
 
-        try:
-            # Create LiveKit API client
-            lk_api = LiveKitAPI(livekit_url, livekit_api_key, livekit_api_secret)
+        def run_async_dispatch():
+            """Run the async dispatch in a separate thread with its own event loop."""
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                lk_api = LiveKitAPI(livekit_url, livekit_api_key, livekit_api_secret)
+                result = loop.run_until_complete(lk_api.agent.dispatch_job(
+                    agent_name=agent_name,
+                    room=room_name,
+                    metadata=json.dumps(metadata)
+                ))
+                return True, result
+            except Exception as e:
+                logger.error(f"LiveKit API dispatch failed: {str(e)}")
+                return False, str(e)
+            finally:
+                loop.close()
 
-            # Dispatch the agent using LiveKit API
+        try:
+            # Dispatch the agent using LiveKit API in separate thread
             logger.info(f"Dispatching call to: {validated_phone} for {first_name} {last_name}")
 
-            dispatch_result = asyncio.run(lk_api.agent.dispatch_job(
-                agent_name=agent_name,
-                room=room_name,
-                metadata=json.dumps(metadata)
-            ))
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run_async_dispatch)
+                dispatch_success, result = future.result(timeout=30)
 
-            logger.info(f"Dispatch successful: {dispatch_result}")
-            dispatch_success = True
+            if dispatch_success:
+                logger.info(f"Dispatch successful: {result}")
+            else:
+                logger.error(f"Dispatch failed: {result}")
 
         except Exception as e:
             logger.error(f"LiveKit API dispatch failed: {str(e)}")
