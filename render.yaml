@@ -4,7 +4,7 @@ services:
     env: python
     plan: starter
     buildCommand: pip install -r web_requirements.txt
-    startCommand: cd agent && gunicorn --bind 0.0.0.0:$PORT web_service:app
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --chdir agent web_service:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
