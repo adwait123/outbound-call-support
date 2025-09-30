@@ -206,17 +206,47 @@ def dispatch_call():
             logger.error("LiveKit dispatch command timed out")
             dispatch_success = False
         except FileNotFoundError:
-            logger.error("LiveKit CLI (lk) not found - installing via npm...")
-            # Try to install lk CLI
+            logger.error("LiveKit CLI (lk) not found - trying alternative installation...")
+            # Try different installation methods for LiveKit CLI
             try:
-                subprocess.run(['npm', 'install', '-g', '@livekit/cli'], timeout=60)
-                # Retry the dispatch after installation
-                result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
-                dispatch_success = result.returncode == 0
-                if dispatch_success:
-                    logger.info(f"Dispatch successful after CLI installation: {result.stdout}")
+                # Try installing via different methods
+                install_commands = [
+                    ['npm', 'install', '-g', 'livekit-cli'],  # Alternative package name
+                    ['npm', 'install', '-g', '@livekit/livekit-cli'],  # Another alternative
+                    ['curl', '-sSL', 'https://github.com/livekit/livekit-cli/releases/latest/download/lk_linux_amd64', '-o', '/tmp/lk'],  # Direct binary
+                ]
+
+                installation_success = False
+                for install_cmd in install_commands:
+                    try:
+                        logger.info(f"Trying installation: {' '.join(install_cmd)}")
+                        if install_cmd[0] == 'curl':
+                            # Download binary directly
+                            subprocess.run(install_cmd, timeout=60, check=True)
+                            subprocess.run(['chmod', '+x', '/tmp/lk'], timeout=10, check=True)
+                            # Update command to use downloaded binary
+                            command[0] = '/tmp/lk'
+                        else:
+                            subprocess.run(install_cmd, timeout=60, check=True)
+                        installation_success = True
+                        logger.info(f"Installation successful: {' '.join(install_cmd)}")
+                        break
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                        logger.warning(f"Installation method failed: {e}")
+                        continue
+
+                if installation_success:
+                    # Retry the dispatch after installation
+                    result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+                    dispatch_success = result.returncode == 0
+                    if dispatch_success:
+                        logger.info(f"Dispatch successful after CLI installation: {result.stdout}")
+                    else:
+                        logger.error(f"Command failed after CLI installation: {result.stderr}")
                 else:
-                    logger.error(f"Command failed after CLI installation: {result.stderr}")
+                    logger.error("All CLI installation methods failed")
+                    dispatch_success = False
+
             except Exception as install_error:
                 logger.error(f"Failed to install LiveKit CLI: {install_error}")
                 dispatch_success = False
