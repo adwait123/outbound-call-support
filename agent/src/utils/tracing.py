@@ -7,7 +7,6 @@ from livekit import agents
 from livekit.plugins import openai
 
 from .common import logger, is_console_mode, MESSAGE_TYPE_USER, MESSAGE_TYPE_AGENT
-from .auth import get_auth_headers, BACKEND_URL
 
 
 # Global trace system infrastructure
@@ -145,37 +144,8 @@ async def trace_consumer():
                 except Exception as e:
                     logger.error(f"Failed to redact: {str(e)}")
 
-            try:
-                # Prepare trace data
-                trace_data = {
-                    "occurred_at": item.occurred_at,
-                    "conversation_id": item.conversation_id,
-                    "message_type": item.message_type,
-                    "message": content
-                }
-                
-                # Add trace_id if provided
-                if item.trace_id is not None:
-                    trace_data["trace_id"] = item.trace_id
-                
-                # Send to backend API using shared session
-                headers = {
-                    **get_auth_headers(),
-                    "Content-Type": "application/json"
-                }
-                async with trace_session.post(
-                    f"{BACKEND_URL}/api/agent/traces",
-                    json=trace_data,
-                    headers=headers
-                ) as response:
-                    if response.status == 200:
-                        logger.info(f"Trace sent to API: {item.conversation_id}, {item.message_type}")
-                    else:
-                        error_text = await response.text()
-                        logger.error(f"Failed to send trace to API: {response.status} - {error_text}")
-                        
-            except Exception as e:
-                logger.error(f"Error in trace_consumer API call: {str(e)}")
+            # For outbound sales calls, just log the trace locally
+            logger.info(f"Trace: {item.conversation_id} | {item.message_type} | {item.occurred_at}")
             
             # Mark task as done
             trace_queue.task_done()

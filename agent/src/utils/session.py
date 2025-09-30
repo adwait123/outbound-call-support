@@ -9,7 +9,6 @@ from pydantic_core import from_json
 from livekit import agents, rtc
 
 from .common import logger, is_console_mode, get_timestamp_iso_berlin, MESSAGE_TYPE_REASONING_USER_RESPONSE, MESSAGE_TYPE_AGENT, MESSAGE_TYPE_USER, ROLE_ASSISTANT
-from .auth import get_auth_headers, BACKEND_URL
 from .tracing import write_trace
 
 
@@ -75,48 +74,9 @@ async def process_structured_output(text_stream: AsyncIterable[str]) -> AsyncIte
 
 async def notify_session_end(userdata: MySessionInfo, is_unit_test: bool = False):
     """Notify the backend that the session ended"""
-    logger.info(f"Inside notify_session_end")
-    
-    if is_unit_test:
-        pass
-    else:
-        # Skip API call in console mode
-        if is_console_mode():
-            logger.info("Skipping session end notification in console mode")
-            return
-
-    try:
-        # Prepare request data
-        request_data = {
-            "conversation_id": userdata.conversation_id,
-            "tenant_id": userdata.tenant_id,
-            "user_id": userdata.user_id,
-            "device_id": userdata.device_id,
-            "agent_id": "nuvu-agent-1",
-            "product_id": None,  # Leave as None for now
-            "total_tokens": None  # Leave as None for now
-        }
-        
-        # Send to backend API using dedicated session
-        headers = {
-            **get_auth_headers(),
-            "Content-Type": "application/json"
-        }
-
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{BACKEND_URL}/api/agent/conversations/end",
-                json=request_data,
-                headers=headers
-            ) as response:
-                if response.status == 200:
-                    logger.info(f"Session end notification sent successfully: {userdata.conversation_id}")
-                else:
-                    error_text = await response.text()
-                    logger.error(f"Failed to send session end notification: {response.status} - {error_text}")
-                
-    except Exception as e:
-        logger.exception(f"Error in notify_session_end: {str(e)}")
+    logger.info(f"Session ended for conversation: {userdata.conversation_id}")
+    # For outbound sales calls, we don't need backend API notifications
+    # Just log the session end for monitoring purposes
 
 
 async def send_ui_trigger(room: rtc.Room, action: str, data: dict = None):
