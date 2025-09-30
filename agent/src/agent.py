@@ -193,6 +193,19 @@ class Assistant(agents.Agent):
         logger.info(f"on_enter: Chat context: {chat_ctx}")
 
         if is_outbound_call:
+            # Extract first name from customer context for personalized greeting
+            customer_first_name = "there"  # Default fallback
+            if customer_context and "First Name:" in customer_context:
+                try:
+                    # Extract first name from customer context
+                    lines = customer_context.split('\n')
+                    for line in lines:
+                        if "First Name:" in line:
+                            customer_first_name = line.split("First Name:")[-1].strip()
+                            break
+                except:
+                    customer_first_name = "there"
+
             # For outbound calls, wait for customer to speak first, then start sales script
             await self.session.generate_reply(
                 instructions=textwrap.dedent(f"""
@@ -200,13 +213,11 @@ class Assistant(agents.Agent):
                     The customer should speak first since you called them.
                     Wait for them to say "Hello" or respond, then immediately follow the GREETING PROTOCOL:
 
-                    Say: "Hi, I am Jack from Floor Covering International. Is this [CUSTOMER_FIRST_NAME]?"
-
-                    IMPORTANT: Replace [CUSTOMER_FIRST_NAME] with the actual customer's first name from the lead information if available.
+                    Say: "Hi, I am Jack from Floor Covering International. Is this {customer_first_name}?"
 
                     Wait for their confirmation:
                     - If YES: Continue with "Great! I see you recently submitted a request for a flooring quote. Do you have a few minutes to confirm your appointment details?"
-                    - If NO: Ask "May I speak with [CUSTOMER_FIRST_NAME]?" or politely end the call
+                    - If NO: Ask "May I speak with {customer_first_name}?" or politely end the call
 
                     Only proceed with the sales flow after confirming you're speaking with the right person.
                 """),
