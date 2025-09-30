@@ -3,6 +3,7 @@ services:
     name: outbound-call-service
     env: python
     plan: starter
+    rootDir: agent
     buildCommand: pip install -r web_requirements.txt
     startCommand: gunicorn --bind 0.0.0.0:$PORT web_service:app
     envVars:
