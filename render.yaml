@@ -3,9 +3,8 @@ services:
     name: outbound-call-service
     env: python
     plan: starter
-    rootDir: agent
     buildCommand: pip install -r web_requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT web_service:app
+    startCommand: cd agent && gunicorn --bind 0.0.0.0:$PORT web_service:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0

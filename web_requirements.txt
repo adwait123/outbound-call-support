@@ -1,0 +1,25 @@
+# Web Service Requirements
+# Flask web framework and dependencies
+Flask==3.0.0
+Werkzeug==3.0.1
+
+# Environment and configuration
+python-dotenv==1.1.1
+
+# JSON handling (included in Python standard library, but explicit for clarity)
+# json - standard library
+
+# Existing agent requirements (core functionality)
+livekit-agents[deepgram,openai,cartesia,silero,turn-detector]==1.2.5
+livekit-plugins-noise-cancellation==0.2.4
+aiohttp==3.12.14
+tzdata==2025.2
+
+# Production WSGI server for deployment
+gunicorn==21.2.0
+
+# CORS support (optional, for browser-based integrations)
+Flask-CORS==4.0.0
+
+# For testing the API
+requests==2.32.5
