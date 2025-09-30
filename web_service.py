@@ -9,13 +9,17 @@ for integration with Zapier workflows and other automation tools.
 import os
 import json
 import logging
-import subprocess
+import asyncio
 from typing import Dict, Any, Optional
 from functools import wraps
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 
 from flask import Flask, request, jsonify, Response
 from dotenv import load_dotenv
+from livekit.api import LiveKitAPI
+from livekit.protocol.room import CreateRoomRequest
+from livekit.protocol.agent_dispatch import CreateAgentDispatchRequest
 
 # Import existing dispatch functionality
 from dispatch_call import validate_phone_number, create_dispatch_command
@@ -165,96 +169,54 @@ def dispatch_call():
                 'message': 'LiveKit credentials not configured'
             }), 500
 
-        try:
-            # Set up environment for lk CLI command
-            env = os.environ.copy()
-            env.update({
-                'LIVEKIT_URL': livekit_url,
-                'LIVEKIT_API_KEY': livekit_api_key,
-                'LIVEKIT_API_SECRET': livekit_api_secret
-            })
-
-            # Build LiveKit CLI command
-            command = [
-                'lk', 'dispatch', 'create',
-                '--new-room',
-                '--room', room_name,
-                '--agent-name', agent_name,
-                '--metadata', json.dumps(metadata)
-            ]
-
-            logger.info(f"Dispatching call to: {validated_phone} for {first_name} {last_name}")
-            logger.info(f"Command: {' '.join(command)}")
-
-            # Execute the command using subprocess
-            result = subprocess.run(
-                command,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-
-            if result.returncode == 0:
-                logger.info(f"Dispatch successful: {result.stdout}")
-                dispatch_success = True
-            else:
-                logger.error(f"Command failed with code {result.returncode}: {result.stderr}")
-                dispatch_success = False
-
-        except subprocess.TimeoutExpired:
-            logger.error("LiveKit dispatch command timed out")
-            dispatch_success = False
-        except FileNotFoundError:
-            logger.error("LiveKit CLI (lk) not found - trying alternative installation...")
-            # Try different installation methods for LiveKit CLI
+        async def dispatch_with_livekit_api():
+            """Use LiveKit Python API to dispatch the call."""
             try:
-                # Try installing via different methods
-                install_commands = [
-                    ['npm', 'install', '-g', 'livekit-cli'],  # Alternative package name
-                    ['npm', 'install', '-g', '@livekit/livekit-cli'],  # Another alternative
-                    ['curl', '-sSL', 'https://github.com/livekit/livekit-cli/releases/latest/download/lk_linux_x86_64', '-o', '/tmp/lk'],  # x86_64 binary
-                    ['curl', '-sSL', 'https://github.com/livekit/livekit-cli/releases/latest/download/lk_linux_amd64', '-o', '/tmp/lk'],  # amd64 binary fallback
-                ]
+                # Initialize LiveKit API client
+                api = LiveKitAPI(livekit_url, livekit_api_key, livekit_api_secret)
 
-                installation_success = False
-                for install_cmd in install_commands:
-                    try:
-                        logger.info(f"Trying installation: {' '.join(install_cmd)}")
-                        if install_cmd[0] == 'curl':
-                            # Download binary directly
-                            subprocess.run(install_cmd, timeout=60, check=True)
-                            subprocess.run(['chmod', '+x', '/tmp/lk'], timeout=10, check=True)
-                            # Test the binary works
-                            test_result = subprocess.run(['/tmp/lk', '--version'], capture_output=True, text=True, timeout=10)
-                            if test_result.returncode != 0:
-                                raise Exception(f"Downloaded binary doesn't work: {test_result.stderr}")
-                            # Update command to use downloaded binary
-                            command[0] = '/tmp/lk'
-                        else:
-                            subprocess.run(install_cmd, timeout=60, check=True)
-                        installation_success = True
-                        logger.info(f"Installation successful: {' '.join(install_cmd)}")
-                        break
-                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                        logger.warning(f"Installation method failed: {e}")
-                        continue
+                # Create room first
+                room_request = CreateRoomRequest(name=room_name)
+                room = await api.room.create_room(room_request)
+                logger.info(f"Created room: {room.name}")
 
-                if installation_success:
-                    # Retry the dispatch after installation
-                    result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
-                    dispatch_success = result.returncode == 0
-                    if dispatch_success:
-                        logger.info(f"Dispatch successful after CLI installation: {result.stdout}")
-                    else:
-                        logger.error(f"Command failed after CLI installation: {result.stderr}")
-                else:
-                    logger.error("All CLI installation methods failed")
-                    dispatch_success = False
+                # Create agent dispatch request
+                dispatch_request = CreateAgentDispatchRequest(
+                    room=room_name,
+                    agent_name=agent_name,
+                    metadata=json.dumps(metadata)
+                )
 
-            except Exception as install_error:
-                logger.error(f"Failed to install LiveKit CLI: {install_error}")
-                dispatch_success = False
+                # Dispatch the agent
+                dispatch_response = await api.agent_dispatch.create_agent_dispatch(dispatch_request)
+                logger.info(f"Dispatch successful: {dispatch_response}")
+                return True
+
+            except Exception as e:
+                logger.error(f"LiveKit API dispatch failed: {str(e)}")
+                return False
+
+        def run_async_dispatch():
+            """Run the async dispatch in a thread."""
+            try:
+                # Create new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                return loop.run_until_complete(dispatch_with_livekit_api())
+            except Exception as e:
+                logger.error(f"Async dispatch error: {str(e)}")
+                return False
+            finally:
+                loop.close()
+
+        try:
+            logger.info(f"Dispatching call to: {validated_phone} for {first_name} {last_name}")
+
+            # Execute async code in thread to avoid event loop issues
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run_async_dispatch)
+                dispatch_success = future.result(timeout=30)
+
         except Exception as e:
             logger.error(f"LiveKit dispatch failed: {str(e)}")
             dispatch_success = False

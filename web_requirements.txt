@@ -9,7 +9,8 @@ python-dotenv==1.1.1
 # JSON handling (included in Python standard library, but explicit for clarity)
 # json - standard library
 
-# Existing agent requirements (core functionality)
+# LiveKit packages for agent dispatch
+livekit-api==0.7.4
 livekit-agents[deepgram,openai,cartesia,silero,turn-detector]==1.2.5
 livekit-plugins-noise-cancellation==0.2.4
 aiohttp==3.12.14
