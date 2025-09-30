@@ -12,9 +12,11 @@ import logging
 from typing import Dict, Any, Optional
 from functools import wraps
 from datetime import datetime
+import asyncio
 
 from flask import Flask, request, jsonify, Response
 from dotenv import load_dotenv
+from livekit.api import LiveKitAPI
 
 # Import existing dispatch functionality
 from dispatch_call import validate_phone_number, create_dispatch_command
@@ -151,14 +153,40 @@ def dispatch_call():
         # Get agent name from environment
         agent_name = os.getenv("AGENT_NAME", "outbound_call_agent")
 
-        # Build LiveKit CLI command
-        command = f"lk dispatch create --new-room --room {room_name} --agent-name {agent_name} --metadata '{json.dumps(metadata)}'"
+        # Create LiveKit API client
+        livekit_url = os.getenv("LIVEKIT_URL")
+        livekit_api_key = os.getenv("LIVEKIT_API_KEY")
+        livekit_api_secret = os.getenv("LIVEKIT_API_SECRET")
 
-        # Execute the command
-        logger.info(f"Dispatching call to: {validated_phone} for {first_name} {last_name}")
-        result = os.system(command)
+        if not all([livekit_url, livekit_api_key, livekit_api_secret]):
+            logger.error("Missing LiveKit credentials")
+            return jsonify({
+                'success': False,
+                'error': 'Configuration error',
+                'message': 'LiveKit credentials not configured'
+            }), 500
 
-        if result == 0:
+        try:
+            # Create LiveKit API client
+            lk_api = LiveKitAPI(livekit_url, livekit_api_key, livekit_api_secret)
+
+            # Dispatch the agent using LiveKit API
+            logger.info(f"Dispatching call to: {validated_phone} for {first_name} {last_name}")
+
+            dispatch_result = asyncio.run(lk_api.agent.dispatch_job(
+                agent_name=agent_name,
+                room=room_name,
+                metadata=json.dumps(metadata)
+            ))
+
+            logger.info(f"Dispatch successful: {dispatch_result}")
+            dispatch_success = True
+
+        except Exception as e:
+            logger.error(f"LiveKit API dispatch failed: {str(e)}")
+            dispatch_success = False
+
+        if dispatch_success:
             # Success response
             response_data = {
                 'success': True,
@@ -175,9 +203,9 @@ def dispatch_call():
             return jsonify(response_data), 200
 
         else:
-            # Command failed
+            # Dispatch failed
             error_msg = f'Failed to dispatch call to {validated_phone}'
-            logger.error(f"Command failed with code {result}: {error_msg}")
+            logger.error(f"Dispatch failed: {error_msg}")
 
             return jsonify({
                 'success': False,
