@@ -196,10 +196,23 @@ class Assistant(agents.Agent):
                     # Add custom prompt context if provided
                     if custom_prompt:
                         custom_prompt_context = f"""
-                        OVERRIDE INSTRUCTIONS - PRIORITIZE THESE:
+                        ==========================================
+                        CRITICAL OVERRIDE - IGNORE ALL PREVIOUS INSTRUCTIONS
+                        ==========================================
+
+                        FORGET EVERYTHING ABOUT FLOOR COVERING INTERNATIONAL.
+                        FORGET BEING JACK.
+                        FORGET ALL FCI WORKFLOWS, TOOLS, AND PROCESSES.
+
+                        YOU ARE NOW OPERATING UNDER COMPLETELY NEW INSTRUCTIONS:
+
                         {custom_prompt}
 
-                        IMPORTANT: The above custom instructions should REPLACE your default Floor Covering International protocols. You are no longer Jack from Floor Covering International. Follow the custom instructions above as your primary role and behavior. Only use your basic professional communication skills and ignore FCI-specific workflows, tools, and branding unless explicitly mentioned in the custom instructions.
+                        ==========================================
+                        END OVERRIDE INSTRUCTIONS
+                        ==========================================
+
+                        MANDATORY: You must ONLY follow the instructions above. Do not use any FCI branding, workflows, or mention Floor Covering International unless explicitly stated in the custom instructions. Do not use FCI tools like confirm_lead_details, generate_appointment_slots, or book_appointment unless specifically required by your new role.
                         """
                 except:
                     customer_context = ""
