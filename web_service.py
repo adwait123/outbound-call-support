@@ -186,6 +186,7 @@ def dispatch_call():
 
         async def dispatch_with_livekit_api():
             """Use LiveKit Python API to dispatch the call."""
+            api = None  # Initialize api to None
             try:
                 # Initialize LiveKit API client
                 api = LiveKitAPI(livekit_url, livekit_api_key, livekit_api_secret)
@@ -210,6 +211,7 @@ def dispatch_call():
             except Exception as e:
                 logger.error(f"LiveKit API dispatch failed: {str(e)}")
                 return False
+
 
         def run_async_dispatch():
             """Run the async dispatch in a thread."""

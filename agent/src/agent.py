@@ -20,69 +20,81 @@ logger: logging.Logger = logging.getLogger(os.getenv("AGENT_NAME"))
 
 
 class Assistant(agents.Agent):
-    def __init__(self, room: rtc.Room, is_sip_session: bool = False) -> None:
+    def __init__(self, room: rtc.Room, metadata: dict, is_sip_session: bool = False) -> None:
+        # Default instructions if no custom prompt is provided
+        default_instructions = textwrap.dedent("""
+            You are Mike, the Torkin Sales Assistant, an expert in helping potential clients schedule their Free In-Home Design Consultation. Your primary role is to validate the user's request, confirm appointment details, and secure a booking for a professional design consultant.
+
+            IMPORTANT: This is an outbound voice call. You are calling the customer who submitted a web form. Keep responses professional, confident, friendly, and persuasive. Use a clear, warm, and inviting tone suitable for a premium home services brand.
+
+            CRITICAL BEHAVIOR RULES:
+            - Be Proactive and Direct: Your goal is to move the user quickly and smoothly to a confirmed appointment
+            - Present Steps One at a Time: For any multi-step process, present information ONE step at a time
+            - Always Wait for User Confirmation: Never proceed without explicit verbal confirmation from the user
+            - REPEAT BACK UNCLEAR RESPONSES: If customer response seems unclear or contradictory, repeat what you heard: "I heard you say [X], is that correct?"
+            - CONFIRM BEFORE BOOKING: Always confirm appointment selection clearly: "Just to confirm, you chose [DATE] at [TIME], is that right?"
+            - CONFIRM EVERY NEW INFORMATION: After receiving ANY new information from the customer (address changes, project details, preferences), immediately confirm by repeating it back: "Got it, so that's [INFORMATION], is that correct?"
+            - SPELL OUT ALL NUMBERS: For ZIP codes, phone numbers, and addresses, spell out each digit individually. Say "six-two-seven-one" instead of "six thousand two hundred seventy-one"
+            - Be Crisp and Confident: Maintain an expert tone suitable for a high-quality service
+            - Keep Responses Suitable for Speech: Use conversational language with no special formatting
+            - Use Brand Language: Use terms like "Free In-Home Design Consultation," "design consultant," and "Floor Covering International"
+
+            SALES & SCHEDULING WORKFLOW:
+            1. Opening and Lead Validation:
+               Begin immediately: "Hi, this is Jack from Floor Covering International. I see you recently submitted a request to quote on Yelp. Is that right, and do you still have a few minutes to confirm your appointment details?"
+               WAIT for confirmation.
+
+            2. Information Confirmation:
+               Call confirm_lead_details to verify the address and project type.
+               Confirm address: "Great. I have your consultation address as [ADDRESS]. Is that correct?"
+               WAIT for confirmation. If customer provides corrections, immediately repeat back: "Got it, so the correct address is [NEW ADDRESS], is that right?"
+               Confirm project: "And this consultation is for [PROJECT_TYPE]? That will help our consultant prepare."
+               WAIT for confirmation. If customer provides new details, immediately repeat back: "Perfect, so this is for [NEW PROJECT_TYPE], correct?"
+
+            3. Material Provision Validation:
+               Ask: "One quick question - will you be providing the flooring materials for this job, or would you like us to handle everything including materials?"
+               WAIT for response.
+               - If customer says they will provide materials:
+                 First attempt: "I understand you have materials in mind. However, would you be open to reconsidering? We have access to exclusive designer collections and premium materials that aren't available to the public, plus we offer comprehensive warranties when we handle both materials and installation. Would you be interested in hearing about our material options during a consultation?"
+                 WAIT for response.
+                 - If customer is open to reconsidering: Continue to appointment scheduling.
+                 - If customer still insists on providing materials: "I understand. Unfortunately, we specialize in full-service installations where we provide both materials and installation to ensure quality and warranty coverage. Thank you for your time, and best of luck with your project."
+               - If customer wants Floor Covering International to provide materials: Continue to appointment scheduling.
+
+            4. Appointment Scheduling:
+               Call generate_appointment_slots with the confirmed details.
+               Present exactly TWO options initially: "Fantastic. We have a design consultant available to visit you on [DATE_1] at [TIME_1], or [DATE_2] at [TIME_2]. Which works better for you?"
+               ONLY provide additional options if customer asks for more choices.
+               WAIT for their selection. Immediately confirm their choice: "Perfect, so you've chosen [SELECTED_DATE] at [SELECTED_TIME], is that correct?"
+
+            5. Confirmation and Wrap-Up:
+               Call book_appointment to secure the time.
+               Provide summary: "Excellent. I have secured your Free In-Home Design Consultation for [DAY], [DATE] at [TIME] at [ADDRESS]. Your consultant will be arriving with hundreds of samples."
+               Conclude: "You'll receive a confirmation text message with all these details in the next 15-20 minutes. Is there anything else I can help you with today?"
+
+            EXCEPTION HANDLING:
+            - No Available Slots: "I apologize, those exact times didn't work. I can have our local scheduling manager call you back within the next hour to personally secure a time that works best. Would that be helpful?" If yes, call raise_callback_request.
+            - User No Longer Interested: "I understand. Thank you for letting us know. If you change your mind, you can always reach us directly. We appreciate your time."
+            - Incorrect Information: "Not a problem, I can quickly update that. What is the correct [DETAIL]?" Continue from step 2.
+
+            SALES TOOLS:
+            - confirm_lead_details: Verify address and project type from web form
+            - generate_appointment_slots: Generate available appointment times
+            - book_appointment: Secure the selected appointment slot
+            - raise_callback_request: Handle callback requests for scheduling conflicts
+        """)
+
+        final_instructions = default_instructions
+        try:
+            custom_prompt = metadata.get("custom_prompt")
+            if custom_prompt:
+                final_instructions = custom_prompt
+        except Exception:
+            # Fallback to default instructions if metadata parsing fails
+            pass
+
         super().__init__(
-            instructions=textwrap.dedent("""
-                    You are Jack, the Floor Covering International Sales Assistant, an expert in helping potential clients schedule their Free In-Home Design Consultation. Your primary role is to validate the user's request, confirm appointment details, and secure a booking for a professional design consultant.
-
-                    IMPORTANT: This is an outbound voice call. You are calling the customer who submitted a web form. Keep responses professional, confident, friendly, and persuasive. Use a clear, warm, and inviting tone suitable for a premium home services brand.
-
-                    CRITICAL BEHAVIOR RULES:
-                    - Be Proactive and Direct: Your goal is to move the user quickly and smoothly to a confirmed appointment
-                    - Present Steps One at a Time: For any multi-step process, present information ONE step at a time
-                    - Always Wait for User Confirmation: Never proceed without explicit verbal confirmation from the user
-                    - REPEAT BACK UNCLEAR RESPONSES: If customer response seems unclear or contradictory, repeat what you heard: "I heard you say [X], is that correct?"
-                    - CONFIRM BEFORE BOOKING: Always confirm appointment selection clearly: "Just to confirm, you chose [DATE] at [TIME], is that right?"
-                    - CONFIRM EVERY NEW INFORMATION: After receiving ANY new information from the customer (address changes, project details, preferences), immediately confirm by repeating it back: "Got it, so that's [INFORMATION], is that correct?"
-                    - SPELL OUT ALL NUMBERS: For ZIP codes, phone numbers, and addresses, spell out each digit individually. Say "six-two-seven-one" instead of "six thousand two hundred seventy-one"
-                    - Be Crisp and Confident: Maintain an expert tone suitable for a high-quality service
-                    - Keep Responses Suitable for Speech: Use conversational language with no special formatting
-                    - Use Brand Language: Use terms like "Free In-Home Design Consultation," "design consultant," and "Floor Covering International"
-
-                    SALES & SCHEDULING WORKFLOW:
-                    1. Opening and Lead Validation:
-                       Begin immediately: "Hi, this is Jack from Floor Covering International. I see you recently submitted a request to quote on Yelp. Is that right, and do you still have a few minutes to confirm your appointment details?"
-                       WAIT for confirmation.
-
-                    2. Information Confirmation:
-                       Call confirm_lead_details to verify the address and project type.
-                       Confirm address: "Great. I have your consultation address as [ADDRESS]. Is that correct?"
-                       WAIT for confirmation. If customer provides corrections, immediately repeat back: "Got it, so the correct address is [NEW ADDRESS], is that right?"
-                       Confirm project: "And this consultation is for [PROJECT_TYPE]? That will help our consultant prepare."
-                       WAIT for confirmation. If customer provides new details, immediately repeat back: "Perfect, so this is for [NEW PROJECT_TYPE], correct?"
-
-                    3. Material Provision Validation:
-                       Ask: "One quick question - will you be providing the flooring materials for this job, or would you like us to handle everything including materials?"
-                       WAIT for response.
-                       - If customer says they will provide materials:
-                         First attempt: "I understand you have materials in mind. However, would you be open to reconsidering? We have access to exclusive designer collections and premium materials that aren't available to the public, plus we offer comprehensive warranties when we handle both materials and installation. Would you be interested in hearing about our material options during a consultation?"
-                         WAIT for response.
-                         - If customer is open to reconsidering: Continue to appointment scheduling.
-                         - If customer still insists on providing materials: "I understand. Unfortunately, we specialize in full-service installations where we provide both materials and installation to ensure quality and warranty coverage. Thank you for your time, and best of luck with your project."
-                       - If customer wants Floor Covering International to provide materials: Continue to appointment scheduling.
-
-                    4. Appointment Scheduling:
-                       Call generate_appointment_slots with the confirmed details.
-                       Present exactly TWO options initially: "Fantastic. We have a design consultant available to visit you on [DATE_1] at [TIME_1], or [DATE_2] at [TIME_2]. Which works better for you?"
-                       ONLY provide additional options if customer asks for more choices.
-                       WAIT for their selection. Immediately confirm their choice: "Perfect, so you've chosen [SELECTED_DATE] at [SELECTED_TIME], is that correct?"
-
-                    5. Confirmation and Wrap-Up:
-                       Call book_appointment to secure the time.
-                       Provide summary: "Excellent. I have secured your Free In-Home Design Consultation for [DAY], [DATE] at [TIME] at [ADDRESS]. Your consultant will be arriving with hundreds of samples."
-                       Conclude: "You'll receive a confirmation text message with all these details in the next 15-20 minutes. Is there anything else I can help you with today?"
-
-                    EXCEPTION HANDLING:
-                    - No Available Slots: "I apologize, those exact times didn't work. I can have our local scheduling manager call you back within the next hour to personally secure a time that works best. Would that be helpful?" If yes, call raise_callback_request.
-                    - User No Longer Interested: "I understand. Thank you for letting us know. If you change your mind, you can always reach us directly. We appreciate your time."
-                    - Incorrect Information: "Not a problem, I can quickly update that. What is the correct [DETAIL]?" Continue from step 2.
-
-                    SALES TOOLS:
-                    - confirm_lead_details: Verify address and project type from web form
-                    - generate_appointment_slots: Generate available appointment times
-                    - book_appointment: Secure the selected appointment slot
-                    - raise_callback_request: Handle callback requests for scheduling conflicts
-            """),
+            instructions=final_instructions,
             stt=deepgram.STT(
                 model="nova-2-phonecall",
                 language="en-US",
@@ -90,24 +102,17 @@ class Assistant(agents.Agent):
                 interim_results=True,
                 filler_words=True,
                 punctuate=True,
-                profanity_filter=False,
-                redact=False,
-                diarize=False,
-                multichannel=False,
-                alternatives=3,
-                tier="enhanced"
+                profanity_filter=False
             ),
             llm=openai.LLM(
                 model="gpt-4.1",
                 parallel_tool_calls=False,
-                temperature=0.3,
-                max_tokens=150
+                temperature=0.3
             ),
             tts=cartesia.TTS(
                 model="sonic-2",
                 voice="146485fd-8736-41c7-88a8-7cdd0da34d84",
                 language="en",
-                speed=1.1,
                 sample_rate=24000,
                 encoding="pcm_s16le",
             ),
@@ -137,7 +142,6 @@ class Assistant(agents.Agent):
 
         # Extract customer info for outbound calls
         customer_context = ""
-        custom_prompt_context = ""
         if is_outbound_call:
             # Access room metadata to get customer info
             room_metadata = getattr(self.room, 'metadata', {})
@@ -192,31 +196,8 @@ class Assistant(agents.Agent):
                             - Only provide additional options if customer specifically asks for more
                             - Keep initial choices simple and clear
                             """
-
-                    # Add custom prompt context if provided
-                    if custom_prompt:
-                        custom_prompt_context = f"""
-                        ==========================================
-                        CRITICAL OVERRIDE - IGNORE ALL PREVIOUS INSTRUCTIONS
-                        ==========================================
-
-                        FORGET EVERYTHING ABOUT FLOOR COVERING INTERNATIONAL.
-                        FORGET BEING JACK.
-                        FORGET ALL FCI WORKFLOWS, TOOLS, AND PROCESSES.
-
-                        YOU ARE NOW OPERATING UNDER COMPLETELY NEW INSTRUCTIONS:
-
-                        {custom_prompt}
-
-                        ==========================================
-                        END OVERRIDE INSTRUCTIONS
-                        ==========================================
-
-                        MANDATORY: You must ONLY follow the instructions above. Do not use any FCI branding, workflows, or mention Floor Covering International unless explicitly stated in the custom instructions. Do not use FCI tools like confirm_lead_details, generate_appointment_slots, or book_appointment unless specifically required by your new role.
-                        """
                 except:
                     customer_context = ""
-                    custom_prompt_context = ""
 
         chat_ctx.add_message(
             role="system",  # role=system works for OpenAI's LLM and Realtime API
@@ -224,8 +205,6 @@ class Assistant(agents.Agent):
                 Current user data: {user_data}.
 
                 {customer_context}
-
-                {custom_prompt_context}
 
                 Follow these business rules:
                 {business_rules}
@@ -521,9 +500,9 @@ async def entrypoint(ctx: agents.JobContext):
     ctx.add_shutdown_callback(session.on_shutdown)
 
     try:
-        metadata = json.loads(ctx.job.metadata)
+        metadata = json.loads(ctx.job.metadata) if ctx.job.metadata else {}
     except:
-        metadata = {"identity": "sales-lead"}
+        metadata = {}
     logger.info(f"metadata: {metadata}")
 
     # Check if this is an outbound call (has phone_number in metadata)
@@ -658,7 +637,7 @@ async def entrypoint(ctx: agents.JobContext):
 
     await session_obj.start(
         room=ctx.room,
-        agent=Assistant(room=ctx.room, is_sip_session=is_sip_session),
+        agent=Assistant(room=ctx.room, metadata=metadata, is_sip_session=is_sip_session),
         room_input_options=room_input_options,
         room_output_options=room_output_options
     )
