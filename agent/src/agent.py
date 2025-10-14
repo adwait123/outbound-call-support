@@ -159,32 +159,47 @@ class Assistant(agents.Agent):
                         address = customer_info.get("address", "")
                         project_info = customer_info.get("project_info", "")
 
-                        customer_context = f"""
-                        CUSTOMER INFORMATION (from lead):
-                        - First Name: {first_name}
-                        - Last Name: {last_name}
-                        - Address: {address}
-                        - Project Info: {project_info}
+                        # Use different greeting protocol based on whether custom prompt is provided
+                        if custom_prompt:
+                            customer_context = f"""
+                            CUSTOMER INFORMATION (from lead):
+                            - First Name: {first_name}
+                            - Last Name: {last_name}
+                            - Address: {address}
+                            - Project Info: {project_info}
 
-                        GREETING PROTOCOL:
-                        1. Start with: "Hi, I am Jack from Floor Covering International. Is this {first_name}?"
-                        2. Wait for confirmation (Yes/No)
-                        3. If YES: Proceed with sales flow
-                        4. If NO: Ask to speak with {first_name} or politely end call
+                            GREETING PROTOCOL (when custom prompt provided):
+                            1. Wait for customer to speak first since you called them
+                            2. Follow your custom instructions for greeting and introducing yourself
+                            3. Confirm you're speaking with {first_name} as appropriate based on your role
+                            """
+                        else:
+                            customer_context = f"""
+                            CUSTOMER INFORMATION (from lead):
+                            - First Name: {first_name}
+                            - Last Name: {last_name}
+                            - Address: {address}
+                            - Project Info: {project_info}
 
-                        OPTION PRESENTATION STRATEGY:
-                        - Start with only 2 main options when presenting choices
-                        - Only provide additional options if customer specifically asks for more
-                        - Keep initial choices simple and clear
-                        """
+                            GREETING PROTOCOL:
+                            1. Start with: "Hi, I am Jack from Floor Covering International. Is this {first_name}?"
+                            2. Wait for confirmation (Yes/No)
+                            3. If YES: Proceed with sales flow
+                            4. If NO: Ask to speak with {first_name} or politely end call
+
+                            OPTION PRESENTATION STRATEGY:
+                            - Start with only 2 main options when presenting choices
+                            - Only provide additional options if customer specifically asks for more
+                            - Keep initial choices simple and clear
+                            """
 
                     # Add custom prompt context if provided
                     if custom_prompt:
                         custom_prompt_context = f"""
-                        CUSTOM INSTRUCTIONS:
+                        OVERRIDE INSTRUCTIONS - PRIORITIZE THESE:
                         {custom_prompt}
 
-                        NOTE: These custom instructions should be followed in addition to your standard protocols. If there are any conflicts, prioritize the custom instructions while maintaining professional standards.
+                        IMPORTANT: The above custom instructions should REPLACE your default Floor Covering International protocols. You are no longer Jack from Floor Covering International. Follow the custom instructions above as your primary role and behavior. Only use your basic professional communication skills and ignore FCI-specific workflows, tools, and branding unless explicitly mentioned in the custom instructions.
                         """
                 except:
                     customer_context = ""
@@ -221,23 +236,50 @@ class Assistant(agents.Agent):
                 except:
                     customer_first_name = "there"
 
-            # For outbound calls, wait for customer to speak first, then start sales script
-            await self.session.generate_reply(
-                instructions=textwrap.dedent(f"""
-                    You are Jack from Floor Covering International making an outbound call.
-                    The customer should speak first since you called them.
-                    Wait for them to say "Hello" or respond, then immediately follow the GREETING PROTOCOL:
+            # Check if custom prompt is provided to use different instructions
+            room_metadata = getattr(self.room, 'metadata', {})
+            has_custom_prompt = False
+            if room_metadata:
+                try:
+                    if isinstance(room_metadata, str):
+                        metadata_dict = json.loads(room_metadata)
+                    else:
+                        metadata_dict = room_metadata
+                    has_custom_prompt = bool(metadata_dict.get("custom_prompt", ""))
+                except:
+                    has_custom_prompt = False
 
-                    Say: "Hi, I am Jack from Floor Covering International. Is this {customer_first_name}?"
+            if has_custom_prompt:
+                # For outbound calls with custom prompt - let the custom instructions take over
+                await self.session.generate_reply(
+                    instructions=textwrap.dedent(f"""
+                        You are making an outbound call to {customer_first_name}.
+                        The customer should speak first since you called them.
+                        Wait for them to say "Hello" or respond, then follow your OVERRIDE INSTRUCTIONS from the system context.
 
-                    Wait for their confirmation:
-                    - If YES: Continue with "Great! I see you recently submitted a request for a flooring quote. Do you have a few minutes to confirm your appointment details?"
-                    - If NO: Ask "May I speak with {customer_first_name}?" or politely end the call
+                        Remember: You are NOT Jack from Floor Covering International unless your custom instructions say so.
+                        Follow your custom role and greeting as specified in your override instructions.
+                    """),
+                    allow_interruptions=True
+                )
+            else:
+                # For outbound calls without custom prompt - use default FCI behavior
+                await self.session.generate_reply(
+                    instructions=textwrap.dedent(f"""
+                        You are Jack from Floor Covering International making an outbound call.
+                        The customer should speak first since you called them.
+                        Wait for them to say "Hello" or respond, then immediately follow the GREETING PROTOCOL:
 
-                    Only proceed with the sales flow after confirming you're speaking with the right person.
-                """),
-                allow_interruptions=True
-            )
+                        Say: "Hi, I am Jack from Floor Covering International. Is this {customer_first_name}?"
+
+                        Wait for their confirmation:
+                        - If YES: Continue with "Great! I see you recently submitted a request for a flooring quote. Do you have a few minutes to confirm your appointment details?"
+                        - If NO: Ask "May I speak with {customer_first_name}?" or politely end the call
+
+                        Only proceed with the sales flow after confirming you're speaking with the right person.
+                    """),
+                    allow_interruptions=True
+                )
         else:
             # Console mode - start immediately
             await self.session.generate_reply(
