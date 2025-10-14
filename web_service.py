@@ -66,6 +66,7 @@ def validate_request_data(data: Dict[str, Any]) -> Optional[str]:
     first_name = data.get('first_name', '').strip()
     last_name = data.get('last_name', '').strip()
     project_info = data.get('project_info', '').strip()
+    custom_prompt = data.get('custom_prompt', '').strip()
 
     if len(first_name) < 1 or len(last_name) < 1:
         return "First name and last name must be at least 1 character"
@@ -75,6 +76,10 @@ def validate_request_data(data: Dict[str, Any]) -> Optional[str]:
 
     if project_info and len(project_info) > 200:
         return "Project information must be less than 200 characters"
+
+    # Allow custom prompt without character limit (reasonable max: 10000 chars)
+    if custom_prompt and len(custom_prompt) > 10000:
+        return "Custom prompt must be less than 10000 characters"
 
     return None
 
@@ -100,7 +105,9 @@ def dispatch_call():
         "first_name": "John",
         "last_name": "Smith",
         "phone_number": "+12125551234",
-        "address": "123 Main St, Springfield, IL 62701" (optional)
+        "address": "123 Main St, Springfield, IL 62701" (optional),
+        "project_info": "Kitchen renovation" (optional),
+        "custom_prompt": "Custom instructions for the agent conversation" (optional)
     }
     """
     try:
@@ -128,6 +135,7 @@ def dispatch_call():
         phone_number = data['phone_number'].strip()
         address = data.get('address', TEST_ADDRESS).strip()
         project_info = data.get('project_info', '').strip()
+        custom_prompt = data.get('custom_prompt', '').strip()
 
         # Validate phone number
         validated_phone = validate_phone_number(phone_number)
@@ -155,6 +163,7 @@ def dispatch_call():
                 "address": address,
                 "project_info": project_info
             },
+            "custom_prompt": custom_prompt,
             "initiated_via": "web_api",
             "timestamp": datetime.utcnow().isoformat()
         }

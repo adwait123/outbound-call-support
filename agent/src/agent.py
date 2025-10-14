@@ -137,6 +137,7 @@ class Assistant(agents.Agent):
 
         # Extract customer info for outbound calls
         customer_context = ""
+        custom_prompt_context = ""
         if is_outbound_call:
             # Access room metadata to get customer info
             room_metadata = getattr(self.room, 'metadata', {})
@@ -150,6 +151,8 @@ class Assistant(agents.Agent):
                         metadata_dict = room_metadata
 
                     customer_info = metadata_dict.get("customer_info", {})
+                    custom_prompt = metadata_dict.get("custom_prompt", "")
+
                     if customer_info:
                         first_name = customer_info.get("first_name", "")
                         last_name = customer_info.get("last_name", "")
@@ -174,8 +177,18 @@ class Assistant(agents.Agent):
                         - Only provide additional options if customer specifically asks for more
                         - Keep initial choices simple and clear
                         """
+
+                    # Add custom prompt context if provided
+                    if custom_prompt:
+                        custom_prompt_context = f"""
+                        CUSTOM INSTRUCTIONS:
+                        {custom_prompt}
+
+                        NOTE: These custom instructions should be followed in addition to your standard protocols. If there are any conflicts, prioritize the custom instructions while maintaining professional standards.
+                        """
                 except:
                     customer_context = ""
+                    custom_prompt_context = ""
 
         chat_ctx.add_message(
             role="system",  # role=system works for OpenAI's LLM and Realtime API
@@ -183,6 +196,8 @@ class Assistant(agents.Agent):
                 Current user data: {user_data}.
 
                 {customer_context}
+
+                {custom_prompt_context}
 
                 Follow these business rules:
                 {business_rules}
