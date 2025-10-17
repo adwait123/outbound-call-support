@@ -211,6 +211,13 @@ def dispatch_call():
             except Exception as e:
                 logger.error(f"LiveKit API dispatch failed: {str(e)}")
                 return False
+            finally:
+                # Clean up the API client to prevent unclosed session warnings
+                if api and hasattr(api, 'aclose'):
+                    try:
+                        await api.aclose()
+                    except Exception as e:
+                        logger.warning(f"Failed to close LiveKit API client: {e}")
 
 
         def run_async_dispatch():

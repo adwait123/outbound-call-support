@@ -36,3 +36,35 @@ services:
         value: "true"
       - key: FLASK_ENV
         value: "production"
+
+  - type: worker
+    name: outbound-call-agent
+    env: python
+    plan: starter
+    buildCommand: cd agent && pip install -r requirements.txt
+    startCommand: cd agent && python src/agent.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: LIVEKIT_URL
+        sync: false  # Set this in Render dashboard
+      - key: LIVEKIT_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: LIVEKIT_API_SECRET
+        sync: false  # Set this in Render dashboard
+      - key: SIP_OUTBOUND_TRUNK_ID
+        sync: false  # Set this in Render dashboard
+      - key: AGENT_NAME
+        value: "outbound_call_agent"
+      - key: OPENAI_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: DEEPGRAM_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: CARTESIA_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: CEREBRAS_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: PERPLEXITY_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: USE_CARTESIA_TTS
+        value: "true"
