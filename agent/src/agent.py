@@ -10,7 +10,6 @@ import asyncio
 
 from livekit import agents, rtc
 from livekit.plugins import deepgram, openai, cartesia, silero, noise_cancellation
-from livekit.plugins.turn_detector.english import EnglishModel
 
 from utils import session, tracing, fetching, common
 
@@ -126,7 +125,6 @@ class Assistant(agents.Agent):
                 encoding="pcm_s16le",
             ),
             vad=silero.VAD.load(),
-            turn_detection=EnglishModel(),
         )
         self.room = room
 
