@@ -9,7 +9,7 @@ from dataclasses import asdict
 import asyncio
 
 from livekit import agents, rtc
-from livekit.plugins import deepgram, openai, cartesia, silero, noise_cancellation
+from livekit.plugins import deepgram, openai, cartesia
 
 from utils import session, tracing, fetching, common
 
@@ -124,7 +124,6 @@ class Assistant(agents.Agent):
                 sample_rate=24000,
                 encoding="pcm_s16le",
             ),
-            vad=silero.VAD.load(),
         )
         self.room = room
 
@@ -635,7 +634,7 @@ async def entrypoint(ctx: agents.JobContext):
     modalities = metadata.get("modalities", "text_and_audio")
     if is_outbound_call or modalities != "text_only":
         room_input_options = agents.RoomInputOptions(
-            text_enabled=True, audio_enabled=True, noise_cancellation=noise_cancellation.BVC()
+            text_enabled=True, audio_enabled=True
         )
         room_output_options = agents.RoomOutputOptions(transcription_enabled=True, audio_enabled=True)
     else:
