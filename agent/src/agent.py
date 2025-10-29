@@ -248,15 +248,14 @@ class Assistant(agents.Agent):
                     has_custom_prompt = False
 
             if has_custom_prompt:
-                # For outbound calls with custom prompt - let the custom instructions take over
+                # For outbound calls with custom prompt - start immediately with custom script
                 await self.session.generate_reply(
                     instructions=textwrap.dedent(f"""
                         You are making an outbound call to {customer_first_name}.
-                        The customer should speak first since you called them.
-                        Wait for them to say "Hello" or respond, then follow your OVERRIDE INSTRUCTIONS from the system context.
+                        Start speaking immediately when the call connects. Begin with your opening line EXACTLY as specified in your custom instructions.
 
-                        Remember: You are NOT Mike from Torkin unless your custom instructions say so.
-                        Follow your custom role and greeting as specified in your override instructions.
+                        Follow your custom role and script as specified in your system context without deviation.
+                        Do not wait for the customer to speak first - you called them, so you should start the conversation.
                     """),
                     allow_interruptions=True
                 )
@@ -265,8 +264,7 @@ class Assistant(agents.Agent):
                 await self.session.generate_reply(
                     instructions=textwrap.dedent(f"""
                         You are Mike from Torkin making an outbound call.
-                        The customer should speak first since you called them.
-                        Wait for them to say "Hello" or respond, then immediately follow the GREETING PROTOCOL:
+                        Start speaking immediately when the call connects. Begin with the GREETING PROTOCOL:
 
                         Say: "Hi, I am Mike from Torkin. Is this {customer_first_name}?"
 
