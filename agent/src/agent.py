@@ -20,6 +20,8 @@ logger: logging.Logger = logging.getLogger(os.getenv("AGENT_NAME"))
 
 class Assistant(agents.Agent):
     def __init__(self, room: rtc.Room, metadata: dict, is_sip_session: bool = False) -> None:
+        # Store metadata for later use
+        self.metadata = metadata
         # Default instructions if no custom prompt is provided
         default_instructions = textwrap.dedent("""
             You are Mike, the Torkin Sales Assistant, an expert in helping potential clients schedule their Free In-Home Design Consultation. Your primary role is to validate the user's request, confirm appointment details, and secure a booking for a professional design consultant.
@@ -149,61 +151,50 @@ class Assistant(agents.Agent):
         # Extract customer info for outbound calls
         customer_context = ""
         if is_outbound_call:
-            # Access room metadata to get customer info
-            room_metadata = getattr(self.room, 'metadata', {})
-            if room_metadata:
-                try:
-                    # Parse room metadata to get customer info
-                    import json
-                    if isinstance(room_metadata, str):
-                        metadata_dict = json.loads(room_metadata)
-                    else:
-                        metadata_dict = room_metadata
+            # Use metadata passed to constructor
+            metadata_dict = self.metadata or {}
+            customer_info = metadata_dict.get("customer_info", {})
+            custom_prompt = metadata_dict.get("custom_prompt", "")
 
-                    customer_info = metadata_dict.get("customer_info", {})
-                    custom_prompt = metadata_dict.get("custom_prompt", "")
+            if customer_info:
+                first_name = customer_info.get("first_name", "")
+                last_name = customer_info.get("last_name", "")
+                address = customer_info.get("address", "")
+                project_info = customer_info.get("project_info", "")
 
-                    if customer_info:
-                        first_name = customer_info.get("first_name", "")
-                        last_name = customer_info.get("last_name", "")
-                        address = customer_info.get("address", "")
-                        project_info = customer_info.get("project_info", "")
+                # Use different greeting protocol based on whether custom prompt is provided
+                if custom_prompt:
+                    customer_context = f"""
+                    CUSTOMER INFORMATION (from lead):
+                    - First Name: {first_name}
+                    - Last Name: {last_name}
+                    - Address: {address}
+                    - Project Info: {project_info}
 
-                        # Use different greeting protocol based on whether custom prompt is provided
-                        if custom_prompt:
-                            customer_context = f"""
-                            CUSTOMER INFORMATION (from lead):
-                            - First Name: {first_name}
-                            - Last Name: {last_name}
-                            - Address: {address}
-                            - Project Info: {project_info}
+                    GREETING PROTOCOL (when custom prompt provided):
+                    1. Start immediately with your custom opening line
+                    2. Follow your custom instructions for greeting and introducing yourself
+                    3. Confirm you're speaking with {first_name} as appropriate based on your role
+                    """
+                else:
+                    customer_context = f"""
+                    CUSTOMER INFORMATION (from lead):
+                    - First Name: {first_name}
+                    - Last Name: {last_name}
+                    - Address: {address}
+                    - Project Info: {project_info}
 
-                            GREETING PROTOCOL (when custom prompt provided):
-                            1. Wait for customer to speak first since you called them
-                            2. Follow your custom instructions for greeting and introducing yourself
-                            3. Confirm you're speaking with {first_name} as appropriate based on your role
-                            """
-                        else:
-                            customer_context = f"""
-                            CUSTOMER INFORMATION (from lead):
-                            - First Name: {first_name}
-                            - Last Name: {last_name}
-                            - Address: {address}
-                            - Project Info: {project_info}
+                    GREETING PROTOCOL:
+                    1. Start with: "Hi, I am Mike from Torkin. Is this {first_name}?"
+                    2. Wait for confirmation (Yes/No)
+                    3. If YES: Proceed with sales flow
+                    4. If NO: Ask to speak with {first_name} or politely end call
 
-                            GREETING PROTOCOL:
-                            1. Start with: "Hi, I am Mike from Torkin. Is this {first_name}?"
-                            2. Wait for confirmation (Yes/No)
-                            3. If YES: Proceed with sales flow
-                            4. If NO: Ask to speak with {first_name} or politely end call
-
-                            OPTION PRESENTATION STRATEGY:
-                            - Start with only 2 main options when presenting choices
-                            - Only provide additional options if customer specifically asks for more
-                            - Keep initial choices simple and clear
-                            """
-                except:
-                    customer_context = ""
+                    OPTION PRESENTATION STRATEGY:
+                    - Start with only 2 main options when presenting choices
+                    - Only provide additional options if customer specifically asks for more
+                    - Keep initial choices simple and clear
+                    """
 
         chat_ctx.add_message(
             role="system",  # role=system works for OpenAI's LLM and Realtime API
@@ -234,18 +225,8 @@ class Assistant(agents.Agent):
                 except:
                     customer_first_name = "there"
 
-            # Check if custom prompt is provided to use different instructions
-            room_metadata = getattr(self.room, 'metadata', {})
-            has_custom_prompt = False
-            if room_metadata:
-                try:
-                    if isinstance(room_metadata, str):
-                        metadata_dict = json.loads(room_metadata)
-                    else:
-                        metadata_dict = room_metadata
-                    has_custom_prompt = bool(metadata_dict.get("custom_prompt", ""))
-                except:
-                    has_custom_prompt = False
+            # Use custom prompt if available (already parsed from metadata)
+            has_custom_prompt = bool(custom_prompt) if is_outbound_call else False
 
             if has_custom_prompt:
                 # For outbound calls with custom prompt - start immediately with custom script
