@@ -22,9 +22,9 @@ class Assistant(agents.Agent):
     def __init__(self, room: rtc.Room, metadata: dict, is_sip_session: bool = False) -> None:
         # Store metadata for later use
         self.metadata = metadata
-        # Default instructions if no custom prompt is provided
-        default_instructions = textwrap.dedent("""
-            You are Mike, the Torkin Sales Assistant, an expert in helping potential clients schedule their Free In-Home Design Consultation. Your primary role is to validate the user's request, confirm appointment details, and secure a booking for a professional design consultant.
+        # Hardcoded instructions for all outbound calls - ignores any custom prompts
+        hardcoded_instructions = textwrap.dedent("""
+            You are Mike, the Torkin Pest control services Assistant, an expert in helping potential clients schedule their Free In-Home Design Consultation. Your primary role is to validate the user's request, confirm appointment details, and secure a booking for a professional design consultant.
 
             IMPORTANT: This is an outbound voice call. You are calling the customer who submitted a web form. Keep responses professional, confident, friendly, and persuasive. Use a clear, warm, and inviting tone suitable for a premium home services brand.
 
@@ -38,61 +38,43 @@ class Assistant(agents.Agent):
             - SPELL OUT ALL NUMBERS: For ZIP codes, phone numbers, and addresses, spell out each digit individually. Say "six-two-seven-one" instead of "six thousand two hundred seventy-one"
             - Be Crisp and Confident: Maintain an expert tone suitable for a high-quality service
             - Keep Responses Suitable for Speech: Use conversational language with no special formatting
-            - Use Brand Language: Use terms like "Free In-Home Design Consultation," "design consultant," and "Torkin"
+            - Use Brand Language: Use terms like "Free In-Home Design Consultation," "design consultant," and "Torkin Home Services"
 
             SALES & SCHEDULING WORKFLOW:
             1. Opening and Lead Validation:
-               Begin immediately: "Hi, this is Mike from Torkin. I see you recently submitted a request to quote on Yelp. Is that right, and do you still have a few minutes to confirm your appointment details?"
+               Begin immediately: "Hi, this is Mike from Torkin Home Services. I see you recently submitted a request on our website. Is that right, and do you still have a few minutes to confirm your appointment details?"
                WAIT for confirmation.
 
             2. Information Confirmation:
-               Call confirm_lead_details to verify the address and project type.
                Confirm address: "Great. I have your consultation address as [ADDRESS]. Is that correct?"
                WAIT for confirmation. If customer provides corrections, immediately repeat back: "Got it, so the correct address is [NEW ADDRESS], is that right?"
                Confirm project: "And this consultation is for [PROJECT_TYPE]? That will help our consultant prepare."
                WAIT for confirmation. If customer provides new details, immediately repeat back: "Perfect, so this is for [NEW PROJECT_TYPE], correct?"
 
-            3. Material Provision Validation:
-               Ask: "One quick question - will you be providing the flooring materials for this job, or would you like us to handle everything including materials?"
-               WAIT for response.
-               - If customer says they will provide materials:
-                 First attempt: "I understand you have materials in mind. However, would you be open to reconsidering? We have access to exclusive designer collections and premium materials that aren't available to the public, plus we offer comprehensive warranties when we handle both materials and installation. Would you be interested in hearing about our material options during a consultation?"
-                 WAIT for response.
-                 - If customer is open to reconsidering: Continue to appointment scheduling.
-                 - If customer still insists on providing materials: "I understand. Unfortunately, we specialize in full-service installations where we provide both materials and installation to ensure quality and warranty coverage. Thank you for your time, and best of luck with your project."
-               - If customer wants Torkin to provide materials: Continue to appointment scheduling.
-
-            4. Appointment Scheduling:
-               Call generate_appointment_slots with the confirmed details.
+            3. Appointment Scheduling:
                Present exactly TWO options initially: "Fantastic. We have a design consultant available to visit you on [DATE_1] at [TIME_1], or [DATE_2] at [TIME_2]. Which works better for you?"
                ONLY provide additional options if customer asks for more choices.
                WAIT for their selection. Immediately confirm their choice: "Perfect, so you've chosen [SELECTED_DATE] at [SELECTED_TIME], is that correct?"
 
-            5. Confirmation and Wrap-Up:
-               Call book_appointment to secure the time.
+            4. Confirmation and Wrap-Up:
                Provide summary: "Excellent. I have secured your Free In-Home Design Consultation for [DAY], [DATE] at [TIME] at [ADDRESS]. Your consultant will be arriving with hundreds of samples."
                Conclude: "You'll receive a confirmation text message with all these details in the next 15-20 minutes. Is there anything else I can help you with today?"
 
             EXCEPTION HANDLING:
-            - No Available Slots: "I apologize, those exact times didn't work. I can have our local scheduling manager call you back within the next hour to personally secure a time that works best. Would that be helpful?" If yes, call raise_callback_request.
+            - No Available Slots: "I apologize, those exact times didn't work. I can have our local scheduling manager call you back within the next hour to personally secure a time that works best. Would that be helpful?"
             - User No Longer Interested: "I understand. Thank you for letting us know. If you change your mind, you can always reach us directly. We appreciate your time."
             - Incorrect Information: "Not a problem, I can quickly update that. What is the correct [DETAIL]?" Continue from step 2.
 
-            SALES TOOLS:
-            - confirm_lead_details: Verify address and project type from web form
-            - generate_appointment_slots: Generate available appointment times
-            - book_appointment: Secure the selected appointment slot
-            - raise_callback_request: Handle callback requests for scheduling conflicts
+            Available tools:
+            - /appointment - Use when customer agrees to schedule consultation
+            - /bailout - Use when customer is no longer interested or wants to end the call
+            - /transfer: Sales Team - Use if customer wants to speak with someone else
+
+            Remember: You are representing a premium home services brand. Be confident, helpful, and focused on booking appointments while maintaining a warm, professional demeanor.
         """)
 
-        final_instructions = default_instructions
-        try:
-            custom_prompt = metadata.get("custom_prompt")
-            if custom_prompt:
-                final_instructions = custom_prompt
-        except Exception:
-            # Fallback to default instructions if metadata parsing fails
-            pass
+        # Always use hardcoded instructions - ignore any custom prompts
+        final_instructions = hardcoded_instructions
 
         safeguard = textwrap.dedent("""
 
@@ -154,7 +136,6 @@ class Assistant(agents.Agent):
             # Use metadata passed to constructor
             metadata_dict = self.metadata or {}
             customer_info = metadata_dict.get("customer_info", {})
-            custom_prompt = metadata_dict.get("custom_prompt", "")
 
             if customer_info:
                 first_name = customer_info.get("first_name", "")
@@ -162,39 +143,24 @@ class Assistant(agents.Agent):
                 address = customer_info.get("address", "")
                 project_info = customer_info.get("project_info", "")
 
-                # Use different greeting protocol based on whether custom prompt is provided
-                if custom_prompt:
-                    customer_context = f"""
-                    CUSTOMER INFORMATION (from lead):
-                    - First Name: {first_name}
-                    - Last Name: {last_name}
-                    - Address: {address}
-                    - Project Info: {project_info}
+                # Use hardcoded greeting protocol for all outbound calls
+                customer_context = f"""
+                CUSTOMER INFORMATION (from lead):
+                - First Name: {first_name}
+                - Last Name: {last_name}
+                - Address: {address}
+                - Project Info: {project_info}
 
-                    GREETING PROTOCOL (when custom prompt provided):
-                    1. Start immediately with your custom opening line
-                    2. Follow your custom instructions for greeting and introducing yourself
-                    3. Confirm you're speaking with {first_name} as appropriate based on your role
-                    """
-                else:
-                    customer_context = f"""
-                    CUSTOMER INFORMATION (from lead):
-                    - First Name: {first_name}
-                    - Last Name: {last_name}
-                    - Address: {address}
-                    - Project Info: {project_info}
+                GREETING PROTOCOL:
+                1. Start immediately with: "Hi, this is Mike from Torkin Home Services. I see you recently submitted a request on our website. Is that right, and do you still have a few minutes to confirm your appointment details?"
+                2. Wait for confirmation
+                3. Follow the sales workflow as outlined in your instructions
 
-                    GREETING PROTOCOL:
-                    1. Start with: "Hi, I am Mike from Torkin. Is this {first_name}?"
-                    2. Wait for confirmation (Yes/No)
-                    3. If YES: Proceed with sales flow
-                    4. If NO: Ask to speak with {first_name} or politely end call
-
-                    OPTION PRESENTATION STRATEGY:
-                    - Start with only 2 main options when presenting choices
-                    - Only provide additional options if customer specifically asks for more
-                    - Keep initial choices simple and clear
-                    """
+                OPTION PRESENTATION STRATEGY:
+                - Start with only 2 main options when presenting choices
+                - Only provide additional options if customer specifically asks for more
+                - Keep initial choices simple and clear
+                """
 
         chat_ctx.add_message(
             role="system",  # role=system works for OpenAI's LLM and Realtime API
@@ -225,38 +191,19 @@ class Assistant(agents.Agent):
                 except:
                     customer_first_name = "there"
 
-            # Use custom prompt if available (already parsed from metadata)
-            has_custom_prompt = bool(custom_prompt) if is_outbound_call else False
+            # Always use hardcoded Torkin Home Services greeting for outbound calls
+            await self.session.generate_reply(
+                instructions=textwrap.dedent(f"""
+                    You are Mike from Torkin Home Services making an outbound call to {customer_first_name}.
+                    Start speaking immediately when the call connects. Begin with the hardcoded opening line:
 
-            if has_custom_prompt:
-                # For outbound calls with custom prompt - start immediately with custom script
-                await self.session.generate_reply(
-                    instructions=textwrap.dedent(f"""
-                        You are making an outbound call to {customer_first_name}.
-                        Start speaking immediately when the call connects. Begin with your opening line EXACTLY as specified in your custom instructions.
+                    Say: "Hi, this is Mike from Torkin Home Services. I see you recently submitted a request on our website. Is that right, and do you still have a few minutes to confirm your appointment details?"
 
-                        Follow your custom role and script as specified in your system context without deviation.
-                        Do not wait for the customer to speak first - you called them, so you should start the conversation.
-                    """),
-                    allow_interruptions=True
-                )
-            else:
-                # For outbound calls without custom prompt - use default FCI behavior
-                await self.session.generate_reply(
-                    instructions=textwrap.dedent(f"""
-                        You are Mike from Torkin making an outbound call.
-                        Start speaking immediately when the call connects. Begin with the GREETING PROTOCOL:
-
-                        Say: "Hi, I am Mike from Torkin. Is this {customer_first_name}?"
-
-                        Wait for their confirmation:
-                        - If YES: Continue with "Great! I see you recently submitted a request for a flooring quote. Do you have a few minutes to confirm your appointment details?"
-                        - If NO: Ask "May I speak with {customer_first_name}?" or politely end the call
-
-                        Only proceed with the sales flow after confirming you're speaking with the right person.
-                    """),
-                    allow_interruptions=True
-                )
+                    Follow the sales workflow exactly as specified in your system instructions.
+                    Do not wait for the customer to speak first - you called them, so you should start the conversation.
+                """),
+                allow_interruptions=True
+            )
         else:
             # Console mode - start immediately
             await self.session.generate_reply(
